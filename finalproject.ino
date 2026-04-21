@@ -22,6 +22,10 @@ Sonar sonar(4);
 #define kp_obs 8  //not sure what will be best starting 5
 #define kd_obs 0  //not sure what will be best starting 2
 
+#define PICK_SERVICE 4
+#define BLACK_THRESHOLD 900
+#define NUM_BINS 3
+
 //Odometry Parameters
 #define diaL 3.2
 #define diaR  3.2
@@ -55,6 +59,9 @@ PDcontroller pd_obs(kp_obs, kd_obs, minOutput, maxOutput);
 PololuBuzzer buzzer;
 
 //Recommended Variables
+int binCount = 0;
+
+display.clear();
 
 //odometry
 int16_t deltaL=0, deltaR=0;
@@ -158,6 +165,12 @@ void loop(){
     //print state for debugging
     Serial.println("State: Wall Following");
     wallFollowing();
+
+   lineSensors.read(lineSensorValues);
+   if (lineSensorValues[2] > BLACK_THRESHOLD) {
+    task = PICK_SERVICE;
+    return;
+   }
     
     // ODOMETRY
     // get counts from encoders for this loop
@@ -299,7 +312,15 @@ void loop(){
       //delay(50);
       justTurned = true; 
       task = WALL_FOLLOWING;
-    }
+      }
+    } else if (task == PICK_SERVICE) {
+     serviceBin();
+     if (binCount >= NUM_BINS) {
+      task = RETURN_TO_DOCK;
+     }
+     else {
+      task = WALL_FOLLOWING;
+     }
   } else if (task == RETURN_TO_DOCK) {
     Serial.println("State: Return to Dock");
 
@@ -441,6 +462,27 @@ bool isDeadEndCell(int row, int col) {
   return (row == 0 && col == 1) ||
          (row == 2 && col == 7);
 }
+
+void serviceBin() {
+ motors.setSpeeds(0, 0);
+ delay(200);
+ binCount++;
+ Serial.print("bin");
+ Serial.print(binCount);
+ Serial.print(" pick-confirmed at t=");
+ Serial.println(millis());
+ display.clear();
+ display.print(F("Bins: "));
+ display.print(binCount);
+ unsigned long spinStart = millis();
+ while (millis() - spinStart < 1800) {
+  motors.setSpeeds(-80, 80);
+}
+ motors.setSpeeds(0, 0);
+ delay(300);
+}
+
+
 
 char reverseMove(char move) {
   if (move == 'R') return 'L';
