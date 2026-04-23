@@ -23,6 +23,11 @@ using namespace Pololu3piPlus32U4;
 #define kd 0 // starting with 0 as a base state
 #define base_speed 100
 
+//phase 3 constants
+#define PICK_SERVICE 4
+#define BLACK_THRESHOLD 900
+#define NUM_BINS 3
+
 #define WALL_FOLLOWING  0
 
 //maze navigation 
@@ -31,16 +36,33 @@ using namespace Pololu3piPlus32U4;
 #define COLS 9
 #define MAXMOVES 200
 
+LineSensors lineSensors;
 Motors motors;
 Servo servo;
 Encoders encoders;
 Sonar sonar(4);
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
 
+//phase 3 variables
+int binCount = 0;
+// display.clear(); is this oled?
+
 //odometry
 int16_t deltaL=0, deltaR=0;
 int16_t encCountsLeft = 0, encCountsRight = 0;
 float x, y, theta;  //to I need to set initial x & y to 10?  ****
+
+//calibration
+int calibrationSpeed = 50;
+// array to hold the 5 line sensor values
+unsigned int lineSensorValues[5];
+unsigned int lineDetectionValues[5];  //what is this? 
+
+//line Following
+int lineCenter = 2000;
+int16_t robotPosition;
+
+bool isOnBlack; //where to use this?
 
 
 
@@ -90,6 +112,13 @@ void loop() {
   if (state == WALL_FOLLOWING) {
     
     wallFollowing();
+
+    //read for line
+    lineSensors.read(lineSensorValues);
+    if (lineSensorValues[2] > BLACK_THRESHOLD) {
+    state = PICK_SERVICE;
+    return;
+   }
 
     // ODOMETRY
     deltaL = encoders.getCountsAndResetLeft();
@@ -142,7 +171,17 @@ void loop() {
     //set current row and column to previous for next loop
     prevRow = currentRow;
     prevCol = currentCol;
+  } else if (state == PICK_SERVICE) {
+     serviceBin();
+     if (binCount >= NUM_BINS) {
+    //  state = RETURN_TO_DOCK;
+     }
+     else {
+      state = WALL_FOLLOWING;
+     }
   }
+
+
   
 
 
@@ -181,4 +220,24 @@ void wallFollowing () {
   Serial.print(actualWallDist);
   Serial.println(" PDout: ");
   Serial.print(PDout);
+}
+
+
+void serviceBin() {
+  motors.setSpeeds(0, 0);
+  delay(200);
+  binCount++;
+  Serial.print("bin");
+  Serial.print(binCount);
+  Serial.print(" pick-confirmed at t=");
+  Serial.println(millis());
+  //display.clear();
+  //display.print(F("Bins: "));
+  //display.print(binCount);
+  unsigned long spinStart = millis();
+  while (millis() - spinStart < 1800) {
+    motors.setSpeeds(-80, 80);
+}
+ motors.setSpeeds(0, 0);
+ delay(300);
 }
