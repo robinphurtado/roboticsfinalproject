@@ -103,23 +103,23 @@ void Odometry::update_odom(int left_encoder_counts, int right_encoder_counts, fl
   }  
 
   // CALCULATE _x BASED ON THE FORMULA FROM THE LECTURES
-  _x += delta_d * (cos(_theta));
+  _x = delta_d * (cos(_theta));
   
   // CALCULATE _y BASED ON THE FORMULA FROM THE LECTURES
-  _y += delta_d * (sin(_theta));
+  _y = delta_d * (sin(_theta));
 
   // CALCULATE CUMULATIVE x, AND CUMULATIVE y. 
   //AKA UPDATE THE VALUE OF &x AND &y (THE PARAMETERS OF THE update_odom FUNCTIONS, WHICH ARE PASSED BY REFERENCE)
-  x = _x;
-  y = _y;
+  x += _x;
+  y += _y;
 
   //REMINDER: CUMULATIVE theta IS EQUAL TO _theta.
   theta = _theta;
 
   // PRINT THE x, y, theta VALUES ON OLED
   //convert theta in radians to angle in degrees
-  float angle_degrees = convertToDegrees(theta);
-  printOLED.print_odom(x, y, angle_degrees);
+  //float angle_degrees = convertToDegrees(theta);
+  printOLED.print_odom(x, y, theta);
 
   // PRINT THE x, y, theta VALUES ON SERIAL MONITOR
   Odometry::printSerial();
