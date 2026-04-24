@@ -1,11 +1,15 @@
 #include <Pololu3piPlus32U4.h>
+#include "printOLED.h"
 #include <Servo.h>
 #include "sonar.h"
 #include "PDcontroller.h"
 #include "odometry.h"
-#include "printOLED.h"
+
 
 using namespace Pololu3piPlus32U4;
+
+//Calibration
+int calibrationSpeed = 50;
 
 //Odometry Parameters
 #define diaL 3.2
@@ -19,16 +23,18 @@ using namespace Pololu3piPlus32U4;
 //Update kp and kd based on your testing
 #define minOutput -100
 #define maxOutput 100
-#define kp 20 // starting with 20 which was decent for P controller
-#define kd 0 // starting with 0 as a base state
+#define kp 5 // starting with 20 which was decent for P controller
+#define kd 1 // starting with 0 as a base state
 #define base_speed 100
 
 //phase 3 constants
-#define PICK_SERVICE 4
+
 #define BLACK_THRESHOLD 900
 #define NUM_BINS 3
 
 #define WALL_FOLLOWING  0
+#define RETURN_TO_DOCK  2
+#define PICK_SERVICE 4
 
 //maze navigation 
 #define CELL_SIZE 20
@@ -42,18 +48,19 @@ Servo servo;
 Encoders encoders;
 Sonar sonar(4);
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
+//OLED display;
 
 //phase 3 variables
 int binCount = 0;
-// display.clear(); is this oled?
+//display.clear();
+
+
 
 //odometry
 int16_t deltaL=0, deltaR=0;
 int16_t encCountsLeft = 0, encCountsRight = 0;
 float x, y, theta;  //to I need to set initial x & y to 10?  ****
 
-//calibration
-int calibrationSpeed = 50;
 // array to hold the 5 line sensor values
 unsigned int lineSensorValues[5];
 unsigned int lineDetectionValues[5];  //what is this? 
@@ -61,6 +68,7 @@ unsigned int lineDetectionValues[5];  //what is this?
 //line Following
 int lineCenter = 2000;
 int16_t robotPosition;
+
 
 bool isOnBlack; //where to use this?
 
@@ -93,10 +101,12 @@ void setup() {
   servo.attach(5);
   delay(40);
   startTime = millis();
-  //calibrate
+  calibrateSensors();
   //Move Sonar to desired direction using Servo
-  servo.write(180);
-  delay(2000);
+  servo.write(135);
+  delay(200);
+  motors.setSpeeds(base_speed, base_speed);
+  delay(1000);
 
   initializeArray();
   // mark starting cell as visited
@@ -108,11 +118,12 @@ void loop() {
   odometry.printSerial();
   //DO NOTE DELETE CODE AFTER EACH TASK, COMMENT OUT INSTEAD
 
-  // WALL FOLLOW
+  // WALL FOLLOW STATE
   if (state == WALL_FOLLOWING) {
     
     wallFollowing();
-
+    // if justTurned = true
+        //if blackline is not detected
     //read for line
     lineSensors.read(lineSensorValues);
     if (lineSensorValues[2] > BLACK_THRESHOLD) {
@@ -171,21 +182,25 @@ void loop() {
     //set current row and column to previous for next loop
     prevRow = currentRow;
     prevCol = currentCol;
+
   } else if (state == PICK_SERVICE) {
      serviceBin();
+     //should this be somewhere else too? 
      if (binCount >= NUM_BINS) {
-    //  state = RETURN_TO_DOCK;
+      state = RETURN_TO_DOCK;
      }
      else {
+      motors.setSpeeds(base_speed, base_speed);
+      //put in a delay in millis
+      delay(1000);
       state = WALL_FOLLOWING;
+      // record updated x, record updated y
      }
+
+  } else if (state == RETURN_TO_DOCK) {
+    motors.setSpeeds(0, 0);
+
   }
-
-
-  
-
-
-
   
 }
 
@@ -209,8 +224,8 @@ void wallFollowing () {
   double PDout = PDcontroller.update(actualWallDist, goalWallDist); //uncomment if using PDcontroller 
 
   // adjust speeds and set motors
-  int16_t leftSpeed = constrain(base_speed + PDout, -400, 400);
-  int16_t rightSpeed = constrain(base_speed - PDout, -400, 400);
+  int16_t leftSpeed = constrain(base_speed - PDout, -400, 400);
+  int16_t rightSpeed = constrain(base_speed + PDout, -400, 400);
   motors.setSpeeds(leftSpeed, rightSpeed);
 
   //Also print outputs to serial monitor for testing purposes
@@ -227,7 +242,7 @@ void serviceBin() {
   motors.setSpeeds(0, 0);
   delay(200);
   binCount++;
-  Serial.print("bin");
+  Serial.print("bin: ");
   Serial.print(binCount);
   Serial.print(" pick-confirmed at t=");
   Serial.println(millis());
@@ -235,9 +250,28 @@ void serviceBin() {
   //display.print(F("Bins: "));
   //display.print(binCount);
   unsigned long spinStart = millis();
-  while (millis() - spinStart < 1800) {
+  while (millis() - spinStart < 3600) {
     motors.setSpeeds(-80, 80);
 }
  motors.setSpeeds(0, 0);
  delay(300);
+}
+
+void calibrateSensors()
+{
+  //Copy your calibrateSensors() function from lab 8
+    // loop to control robot back and forth wiggle
+  for (int i = 0; i < 80; i++){
+    if(i < 20 || i >= 60)
+      // rotate left over line for 20 interations
+      motors.setSpeeds(-calibrationSpeed, calibrationSpeed);
+     else
+      // rotate right over the line for 20 iterations
+      motors.setSpeeds(calibrationSpeed, -calibrationSpeed);
+    //calibrate with sensors on
+    lineSensors.calibrate();
+    delay(20);
+  }
+  // stop robot when calibration is complete
+  motors.setSpeeds(0,0);
 }
