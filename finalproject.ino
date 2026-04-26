@@ -24,6 +24,7 @@ using namespace Pololu3piPlus32U4;
 #define base_speed 100
 
 #define WALL_FOLLOWING  0
+#define RETURN_TO_DOCK 2
 
 //maze navigation 
 #define CELL_SIZE 20
@@ -36,22 +37,17 @@ Servo servo;
 Encoders encoders;
 Sonar sonar(4);
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
+PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
 
 //odometry
 int16_t deltaL=0, deltaR=0;
 int16_t encCountsLeft = 0, encCountsRight = 0;
 float x, y, theta;  //to I need to set initial x & y to 10?  ****
 
-
-
-int state = WALL_FOLLOWING;
-
-
-PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
-
+// wall following variables
 const double goalWallDist=10.0; // Goal distance from wall (cm)
-
 double actualWallDist;
+int state = WALL_FOLLOWING;
 
 // cell and movement tracking
 int currentRow = 0;  //should these be local? 
@@ -70,13 +66,13 @@ void setup() {
   Serial.begin(9600);
   servo.attach(5);
   delay(40);
+  initializeArray();
   startTime = millis();
   //calibrate
   //Move Sonar to desired direction using Servo
-  servo.write(180);
+  servo.write(135);
   delay(2000);
-
-  initializeArray();
+  
   // mark starting cell as visited
   visitedCells[0][0] = 'V';
 }
@@ -84,7 +80,6 @@ void setup() {
 void loop() {
 
   odometry.printSerial();
-  //DO NOTE DELETE CODE AFTER EACH TASK, COMMENT OUT INSTEAD
 
   // WALL FOLLOW
   if (state == WALL_FOLLOWING) {
@@ -101,37 +96,51 @@ void loop() {
     odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);
 
     //CELL TRACKING
-    currentCol = x/CELL_SIZE; 
-    currentRow = y/CELL_SIZE;
+    currentRow = (y-10)/CELL_SIZE;
+    currentCol = (-x-10)/CELL_SIZE; //reversing sign for positive col#s recorded/ reversing pos direction of x axis
+    
 
     // break this out to a function ?
+    // if current row or column has changed
     if(currentRow != prevRow || currentCol != prevCol) {
     
       //maybe add bounds checking
-      if (visitedCells[currentRow][currentCol] != 'V') { 
+      //if current cell has not been visited
+      if (visitedCells[currentRow][currentCol] != 'V') {
+        // mark cell as visited 
         visitedCells[currentRow][currentCol] = 'V';
+        // print new cell row and col visited
         Serial.print("cell [");
         Serial.print(currentRow);
         Serial.print("][");
         Serial.print(currentCol);
         Serial.println("] visited");
       }
+      // MOVE TRACKING
+      // if current column# is greater than prev column#
       if (currentCol > prevCol) {
+        // robot came from right (x axis is reversed)
         movementLog[currentMove] = 'R';
         Serial.print(currentMove);
         Serial.println(" R");
         currentMove++;
+        // if current column# is less than prev column#
       } else if (currentCol < prevCol) {
+        // robot came from left (x axis is reversed)
         movementLog[currentMove] = 'L';
         Serial.print(currentMove);
         Serial.println(" L");
         currentMove++;
+        // if current row is greater than previous row
       } else if (currentRow > prevRow) {
+        // robot traveled up
         movementLog[currentMove] = 'U';
         Serial.print(currentMove);
         Serial.println(" U");
         currentMove++;
+        // if current row is less than previous row
       } else if (currentRow < prevRow) {
+        // robot traveled down
         movementLog[currentMove] = 'D';
         Serial.print(currentMove);
         Serial.println(" D");
@@ -150,6 +159,13 @@ void loop() {
   
 }
 
+//HELPER FUNCTIONS
+
+/*initializeArray initializes all cells the visitedCells Array with 'N' for 
+not visited, then marks the unreachable cells occupied by the pallet as 'V'
+for visited so that the robot does not require those cells to be visited before
+moving to RETURN_TO_DOCK. does not return a value */
+
 //initialize the array with 'N'
 void initializeArray()
 {
@@ -162,7 +178,10 @@ void initializeArray()
   visitedCells[0][2] = 'V';
   visitedCells[0][3] = 'V';
 }
-//wall Following
+
+/*wallFollowing function pings sonar, calculates distance from nearest obstacle,
+then adjusts the wheel speeds to turn to avoid obstacle, constraining min speed
+and max speed at -400 and 400 respectively to not damage motor. does not return a value */
 void wallFollowing () {
 
   actualWallDist = sonar.readDist();
