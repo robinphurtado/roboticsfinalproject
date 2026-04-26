@@ -59,7 +59,9 @@ int binCount = 0;
 //odometry
 int16_t deltaL=0, deltaR=0;
 int16_t encCountsLeft = 0, encCountsRight = 0;
-float x, y, theta;  //to I need to set initial x & y to 10?  ****
+float x = 10;
+float y = 10; 
+float theta;  //to I need to set initial x & y to 10?  ****
 
 // array to hold the 5 line sensor values
 unsigned int lineSensorValues[5];
@@ -162,8 +164,8 @@ void loop() {
     odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);
 
     //CELL TRACKING
-    currentCol = x/CELL_SIZE; 
-    currentRow = y/CELL_SIZE;
+    currentCol = (x-10)/CELL_SIZE; 
+    currentRow = (y-10)/CELL_SIZE;
 
     // break this out to a function ?
     if(currentRow != prevRow || currentCol != prevCol) {
@@ -256,7 +258,7 @@ void wallFollowing () {
   int16_t leftSpeed = constrain(base_speed + PDout, -400, 400);
   int16_t rightSpeed = constrain(base_speed - PDout, -400, 400);
   */
-  
+
   motors.setSpeeds(leftSpeed, rightSpeed);
   
   //Also print outputs to serial monitor for testing purposes
@@ -281,6 +283,7 @@ void serviceBin() {
   //display.print(F("Bins: "));
   //display.print(binCount);
   unsigned long spinStart = millis();
+  // refine or try goToAngle ? 
   while (millis() - spinStart < 3600) {
     motors.setSpeeds(-80, 80);
 }
