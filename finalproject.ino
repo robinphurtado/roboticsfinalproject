@@ -23,8 +23,8 @@ int calibrationSpeed = 50;
 //Update kp and kd based on your testing
 #define minOutput -100
 #define maxOutput 100
-#define kp 5 // starting with 20 which was decent for P controller
-#define kd 1 // starting with 0 as a base state
+#define kp 10 // starting with 20 which was decent for P controller
+#define kd 2 // starting with 0 as a base state
 #define base_speed 100
 
 //phase 3 constants
@@ -68,6 +68,7 @@ unsigned int lineDetectionValues[5];  //what is this?
 //line Following
 int lineCenter = 2000;
 int16_t robotPosition;
+bool justTurned = false;
 
 
 bool isOnBlack; //where to use this?
@@ -120,16 +121,36 @@ void loop() {
 
   // WALL FOLLOW STATE
   if (state == WALL_FOLLOWING) {
+    Serial.print("State: Wall Following");
     
     wallFollowing();
-    // if justTurned = true
-        //if blackline is not detected
+
     //read for line
     lineSensors.read(lineSensorValues);
-    if (lineSensorValues[2] > BLACK_THRESHOLD) {
-    state = PICK_SERVICE;
-    return;
-   }
+    /*  changing so isOnBlack is only true when black is detected
+    if (lineSensorValues[2] > BLACK_THRESHOLD){
+      isOnBlack = true;
+    }
+      */
+    isOnBlack = lineSensorValues[2] > BLACK_THRESHOLD;
+
+    // if just turned but still on the black square, continue wall following
+    if (justTurned && isOnBlack){
+      return;    
+    }
+
+    // if just turned and no longer on black square, reset justTurned 
+    if (justTurned && !isOnBlack){
+      justTurned = false;        
+      return;    
+    }
+
+    // if not just turned and no longer on black square, 
+    if (!justTurned && isOnBlack){
+      state = PICK_SERVICE;        
+      return;    
+    }
+   
 
     // ODOMETRY
     deltaL = encoders.getCountsAndResetLeft();
@@ -190,11 +211,14 @@ void loop() {
       state = RETURN_TO_DOCK;
      }
      else {
+      //removed this because If we come out of spin crooked, it will crash into wall. going with boolean instead
+      /*
       motors.setSpeeds(base_speed, base_speed);
       //put in a delay in millis
       delay(1000);
+      */
+      justTurned = true;
       state = WALL_FOLLOWING;
-      // record updated x, record updated y
      }
 
   } else if (state == RETURN_TO_DOCK) {
@@ -224,10 +248,17 @@ void wallFollowing () {
   double PDout = PDcontroller.update(actualWallDist, goalWallDist); //uncomment if using PDcontroller 
 
   // adjust speeds and set motors
+  ///*
   int16_t leftSpeed = constrain(base_speed - PDout, -400, 400);
   int16_t rightSpeed = constrain(base_speed + PDout, -400, 400);
+  //*/
+  /* switch 
+  int16_t leftSpeed = constrain(base_speed + PDout, -400, 400);
+  int16_t rightSpeed = constrain(base_speed - PDout, -400, 400);
+  */
+  
   motors.setSpeeds(leftSpeed, rightSpeed);
-
+  
   //Also print outputs to serial monitor for testing purposes
   Serial.print("Goal: ");
   Serial.print(goalWallDist);
