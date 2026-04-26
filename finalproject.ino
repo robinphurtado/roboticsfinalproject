@@ -235,9 +235,9 @@ void loop() {
 
   }  
 }
-//HELPER METHODS
+//HELPER FUNCTIONS
 
-/*initializeArray initializes all cells the visitedCells Array with 'N' for 
+/*initializeArray function initializes all cells the visitedCells Array with 'N' for 
 not visited, then marks the unreachable cells occupied by the pallet as 'V'
 for visited so that the robot does not require those cells to be visited before
 moving to RETURN_TO_DOCK. does not return a value */
@@ -253,7 +253,7 @@ void initializeArray()
   visitedCells[0][3] = 'V';
 }
 
-/*wallFollowing method pings sonar, calculates distance from nearest obstacle,
+/*wallFollowing function pings sonar, calculates distance from nearest obstacle,
 then adjusts the wheel speeds to turn to avoid obstacle, constraining min speed
 and max speed at -400 and 400 respectively to not damage motor. does not return a value */
 void wallFollowing () {
@@ -283,7 +283,7 @@ void wallFollowing () {
   Serial.println(PDout);
 }
 
-/*serviceBin stops robot, increments bin count, and does a 360 degree
+/*serviceBin function stops robot, increments bin count, and does a 360 degree
 turn to signify collecting the bin ADD SOUND AND FIX DISPLAY. does not return a value */
 void serviceBin() {
 
@@ -306,11 +306,11 @@ void serviceBin() {
  delay(300);
 }
 
-/*serviceBin stops robot, increments bin count, and does a 360 degree
-turn to signify collecting the bin ADD SOUND AND FIX DISPLAY. does not return a value */
+/*calibrateSensors function calibrates the sensors for line detection.
+turns on the IR sensors and rotates the robots left and right in place 
+to calibrate the IR sensors when placed over a calibration square */
 void calibrateSensors()
 {
-  //Copy your calibrateSensors() function from lab 8
     // loop to control robot back and forth wiggle
   for (int i = 0; i < 80; i++){
     if(i < 20 || i >= 60)
