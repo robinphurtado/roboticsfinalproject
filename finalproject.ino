@@ -28,10 +28,10 @@ int calibrationSpeed = 50;
 #define base_speed 100
 
 //phase 3 constants
-
 #define BLACK_THRESHOLD 900
 #define NUM_BINS 3
 
+// state constants
 #define WALL_FOLLOWING  0
 #define RETURN_TO_DOCK  2
 #define PICK_SERVICE 4
@@ -42,6 +42,7 @@ int calibrationSpeed = 50;
 #define COLS 9
 #define MAXMOVES 200
 
+// object instances
 LineSensors lineSensors;
 Motors motors;
 Servo servo;
@@ -49,18 +50,18 @@ Encoders encoders;
 Sonar sonar(4);
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
 //OLED display;
+PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
 
 //phase 3 variables
 int binCount = 0;
 //display.clear();
-
-
+bool isOnBlack;
 
 //odometry
 int16_t deltaL=0, deltaR=0;
 int16_t encCountsLeft = 0, encCountsRight = 0;
-float x = 10;
-float y = 10; 
+float x = 10.0;
+float y = 10.0; 
 float theta;  //to I need to set initial x & y to 10?  ****
 
 // array to hold the 5 line sensor values
@@ -72,29 +73,20 @@ int lineCenter = 2000;
 int16_t robotPosition;
 bool justTurned = false;
 
-
-bool isOnBlack; //where to use this?
-
-
-
-int state = WALL_FOLLOWING;
-
-
-PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
-
+// wall following variables
 const double goalWallDist=10.0; // Goal distance from wall (cm)
-
 double actualWallDist;
+int state = WALL_FOLLOWING;   // start in WALL_FOLLOWING state
 
 // cell and movement tracking
-int currentRow = 0;  //should these be local? 
+int currentRow = 0;  
 int currentCol = 0;
 int prevRow = 0;
 int prevCol = 0;
-int currentMove = 0;
+int currentMove = 0;  
 char visitedCells[ROWS][COLS];
 char movementLog[MAXMOVES];
-int returnIndex = -1;  //initialize with -1 so we know return to dock hasnt started yet
+int returnIndex = -1;  //initialize with -1 so we know return to dock hasn't started yet
 
 // total timekeeping 
 unsigned long startTime, endTime;
@@ -103,29 +95,26 @@ void setup() {
   Serial.begin(9600);
   servo.attach(5);
   delay(40);
-  startTime = millis();
-  calibrateSensors();
-  //Move Sonar to desired direction using Servo
-  servo.write(135);
+  initializeArray();  
+  startTime = millis(); //record start time
+  calibrateSensors();  
+  servo.write(135); //Move Sonar to 135 degress to detect forward and to the left
   delay(200);
   motors.setSpeeds(base_speed, base_speed);
-  delay(1000);
-
-  initializeArray();
+  delay(1000);  // drive off start square
   // mark starting cell as visited
   visitedCells[0][0] = 'V';
 }
 
 void loop() {
 
-  odometry.printSerial();
-  //DO NOTE DELETE CODE AFTER EACH TASK, COMMENT OUT INSTEAD
+  odometry.printSerial(); //print current x, y, theta
 
-  // WALL FOLLOW STATE
-  if (state == WALL_FOLLOWING) {
+  // STATE WALL FOLLOWING 
+  if (state == WALL_FOLLOWING) {    
     Serial.print("State: Wall Following");
-    
-    wallFollowing();
+
+    wallFollowing(); 
 
     //read for line
     lineSensors.read(lineSensorValues);
@@ -153,8 +142,8 @@ void loop() {
       return;    
     }
    
-
-    // ODOMETRY
+    // odometry
+    // store and then reset current encoder counts
     deltaL = encoders.getCountsAndResetLeft();
     deltaR = encoders.getCountsAndResetRight();
     // Increment total encoder count
@@ -163,74 +152,95 @@ void loop() {
     // update x,y, and theta 
     odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);
 
-    //CELL TRACKING
-    currentCol = (x-10)/CELL_SIZE; 
+    //cell tracking
+    // using int division to track current cell
+    //starting of maze is lower right, x will be negative the whole time
     currentRow = (y-10)/CELL_SIZE;
+    currentCol = (-x-10)/CELL_SIZE; //reversing sign for positive col#s recorded/ reversing pos direction of x axis
+    
 
     // break this out to a function ?
+    // if current row or column has changed
     if(currentRow != prevRow || currentCol != prevCol) {
     
       //maybe add bounds checking
+      //if current cell has not been visited
       if (visitedCells[currentRow][currentCol] != 'V') { 
+        // mark cell as visited
         visitedCells[currentRow][currentCol] = 'V';
+        // print new cell row and col visited
         Serial.print("cell [");
         Serial.print(currentRow);
         Serial.print("][");
         Serial.print(currentCol);
         Serial.println("] visited");
       }
+      // MOVE TRACKING
+      // if current column# is greater than prev column#
       if (currentCol > prevCol) {
+        // robot came from right (x axis is reversed)
         movementLog[currentMove] = 'R';
         Serial.print(currentMove);
         Serial.println(" R");
         currentMove++;
+        // if current column# is less than prev column#
       } else if (currentCol < prevCol) {
-        movementLog[currentMove] = 'L';
+        // robot came from left (x axis is reversed)
+        movementLog[currentMove] = 'L';        
         Serial.print(currentMove);
         Serial.println(" L");
         currentMove++;
+        // if current row is greater than previous row
       } else if (currentRow > prevRow) {
+        // robot traveled up
         movementLog[currentMove] = 'U';
         Serial.print(currentMove);
         Serial.println(" U");
         currentMove++;
+        // if current row is less than previous row
       } else if (currentRow < prevRow) {
+        // robot traveled down 
         movementLog[currentMove] = 'D';
         Serial.print(currentMove);
         Serial.println(" D");
         currentMove++;
       }
-    }
-    
+    }    
     //set current row and column to previous for next loop
     prevRow = currentRow;
     prevCol = currentCol;
 
+  // STATE PICK SERVICE
   } else if (state == PICK_SERVICE) {
-     serviceBin();
-     //should this be somewhere else too? 
-     if (binCount >= NUM_BINS) {
+    Serial.print("State: Pick Service");
+
+    serviceBin();
+    //once all bins are collected 
+    if (binCount >= NUM_BINS) {
+      //return to dock
       state = RETURN_TO_DOCK;
-     }
-     else {
-      //removed this because If we come out of spin crooked, it will crash into wall. going with boolean instead
-      /*
-      motors.setSpeeds(base_speed, base_speed);
-      //put in a delay in millis
-      delay(1000);
-      */
+    }
+    else {
+      //otherwise record just turned and return to WALL_FOLLOWING state
       justTurned = true;
       state = WALL_FOLLOWING;
-     }
+    }
 
+  // STATE RETURN TO DOCK
   } else if (state == RETURN_TO_DOCK) {
+    Serial.print("State: Return to Dock");
+
+    // for now just stop, later implement code for returning
     motors.setSpeeds(0, 0);
 
-  }
-  
+  }  
 }
+//HELPER METHODS
 
-//initialize the array with 'N'
+/*initializeArray initializes all cells the visitedCells Array with 'N' for 
+not visited, then marks the unreachable cells occupied by the pallet as 'V'
+for visited so that the robot does not require those cells to be visited before
+moving to RETURN_TO_DOCK. does not return a value */
 void initializeArray()
 {
   for (int r = 0; r < ROWS; r++) {
@@ -242,7 +252,10 @@ void initializeArray()
   visitedCells[0][2] = 'V';
   visitedCells[0][3] = 'V';
 }
-//wall Following
+
+/*wallFollowing method pings sonar, calculates distance from nearest obstacle,
+then adjusts the wheel speeds to turn to avoid obstacle, constraining min speed
+and max speed at -400 and 400 respectively to not damage motor. does not return a value */
 void wallFollowing () {
 
   actualWallDist = sonar.readDist();
@@ -266,12 +279,14 @@ void wallFollowing () {
   Serial.print(goalWallDist);
   Serial.print(" Actual: ");
   Serial.print(actualWallDist);
-  Serial.println(" PDout: ");
-  Serial.print(PDout);
+  Serial.print(" PDout: ");
+  Serial.println(PDout);
 }
 
-
+/*serviceBin stops robot, increments bin count, and does a 360 degree
+turn to signify collecting the bin ADD SOUND AND FIX DISPLAY. does not return a value */
 void serviceBin() {
+
   motors.setSpeeds(0, 0);
   delay(200);
   binCount++;
@@ -291,6 +306,8 @@ void serviceBin() {
  delay(300);
 }
 
+/*serviceBin stops robot, increments bin count, and does a 360 degree
+turn to signify collecting the bin ADD SOUND AND FIX DISPLAY. does not return a value */
 void calibrateSensors()
 {
   //Copy your calibrateSensors() function from lab 8
