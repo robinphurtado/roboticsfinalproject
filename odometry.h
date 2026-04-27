@@ -15,13 +15,15 @@ class Odometry{
 
     //function printSerial() prints out the tuple [x, y, theta] to the serial monitor
     //called by update_odom
-    void printSerial();
+    void printSerial(float x, float y, float theta);
 
     // overloaded function to print out the encoderCounts to the Serial Monitor
     void printSerial(int16_t encCountsLeft, int16_t encCountsRight);
 
     void update_odom(int left_encoder_counts, int right_encoder_counts, float &x, float &y, float &theta);
 
+    // normalize angle so it always prints between 0 - 360 degrees
+    float normalizeAngle(float angle);
     
   private:
     float _diaL;

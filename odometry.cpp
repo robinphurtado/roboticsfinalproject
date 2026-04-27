@@ -49,41 +49,10 @@ Odometry::Odometry(float diaL, float diaR, float w, int nL, int nR, int gearRati
   }
 }
 
-// convert rads to degrees to output to OLED
-//accepts parameter theta in radians, returns angle in degrees
-float Odometry::convertToDegrees(float theta) { 
-  float angle_degrees = theta*(180.0/PI);
-  return angle_degrees;
-}
-
-// convert degrees to rads
-//accepts angle in degress, returns angle in radian
-float Odometry::convertToRadian(float angle) { 
-  float angle_theta = (angle/180)*PI;
-  return angle_theta;
-}
-
-void Odometry::printSerial(){
-  float angle = convertToDegrees(_theta);
-  Serial.print("["); 
-  Serial.print(_x, 3);
-  Serial.print(", ");
-  Serial.print(_y, 3);
-  Serial.print(", ");
-  Serial.print(angle, 3); 
-  Serial.println("]");
-}
-
-//overloaded version
-void Odometry::printSerial(int16_t encCountsLeft, int16_t encCountsRight){
-  Serial.print(encCountsLeft);
-  Serial.print(", ");
-  Serial.print(encCountsRight);
-}
 
 // USE ODOMETRY FORMULAS TO CALCULATE ROBOT'S NEW POSITION AND ORIENTATION
 void Odometry::update_odom(int left_encoder_counts, int right_encoder_counts, float &x, float &y, float &theta){
-///* Uncomment after Steps 1 &  2	
+
   float L = left_encoder_counts - _left_encoder_counts_prev;
   float R = right_encoder_counts - _right_encoder_counts_prev;
   
@@ -100,34 +69,69 @@ void Odometry::update_odom(int left_encoder_counts, int right_encoder_counts, fl
     _theta += angleRate * 0.0001;
   }else{// OTHERWISE, CALCULATE THE ANGLE _theta FROM ENCODERS
     _theta += (deltaR-deltaL)/_w;
+    _theta = normalizeAngle(_theta);  // TROUBLESHOOT 4/27
   }  
 
   // CALCULATE _x BASED ON THE FORMULA FROM THE LECTURES
-  _x = delta_d * (cos(_theta));
-  
+  _x = delta_d * (cos(_theta));  
   // CALCULATE _y BASED ON THE FORMULA FROM THE LECTURES
   _y = delta_d * (sin(_theta));
-
-  // CALCULATE CUMULATIVE x, AND CUMULATIVE y. 
-  //AKA UPDATE THE VALUE OF &x AND &y (THE PARAMETERS OF THE update_odom FUNCTIONS, WHICH ARE PASSED BY REFERENCE)
+  // CALCULATE CUMULATIVE x, CUMULATIVE y, and CUMULATIVE theta. 
   x += _x;
   y += _y;
-
-  //REMINDER: CUMULATIVE theta IS EQUAL TO _theta.
   theta = _theta;
 
   // PRINT THE x, y, theta VALUES ON OLED
   //convert theta in radians to angle in degrees
   //float angle_degrees = convertToDegrees(theta);
-  printOLED.print_odom(x, y, theta);
+  printOLED.print_odom(x, y, theta);  
 
   // PRINT THE x, y, theta VALUES ON SERIAL MONITOR
-  Odometry::printSerial();
+  // for troubleshooting  4/27
+  Serial.print("In update odom: ");
+  Odometry::printSerial(x, y, theta);
 
   // Save the current encoder values as the "previous" values, so you can use it in the next iteration
   _left_encoder_counts_prev = left_encoder_counts;
   _right_encoder_counts_prev = right_encoder_counts;
 
-//*/
+}
 
+// convert rads to degrees to output to OLED
+//accepts parameter theta in radians, returns angle in degrees
+float Odometry::convertToDegrees(float theta) { 
+  float angle_degrees = theta*(180.0/PI);
+  return angle_degrees;
+}
+
+// convert degrees to rads
+//accepts angle in degress, returns angle in radian
+float Odometry::convertToRadian(float angle) { 
+  float angle_theta = (angle/180)*PI;
+  return angle_theta;
+}
+
+void Odometry::printSerial(float x, float y, float theta){
+  float angle = convertToDegrees(theta);  
+  Serial.print("[x:"); 
+  Serial.print(x, 3);
+  Serial.print(", y:");
+  Serial.print(y, 3);
+  Serial.print(", theta: ");
+  Serial.print(angle, 3); 
+  Serial.println("]");
+   Serial.println("------------------");
+}
+
+//overloaded version
+void Odometry::printSerial(int16_t encCountsLeft, int16_t encCountsRight){
+  Serial.print(encCountsLeft);
+  Serial.print(", ");
+  Serial.print(encCountsRight);
+}
+
+float Odometry::normalizeAngle(float angle) {
+  while (angle > PI)  angle -= 2 * PI;
+  while (angle < -PI) angle += 2 * PI;
+  return angle;
 }
