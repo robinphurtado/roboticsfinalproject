@@ -49,11 +49,12 @@ Servo servo;
 Encoders encoders;
 Sonar sonar(4);
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
-//OLED display;
+PrintOLED oled;
 PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
 
 //phase 3 variables
 int binCount = 0;
+
 //display.clear();
 bool isOnBlack;
 
@@ -294,9 +295,14 @@ void serviceBin() {
   Serial.print(binCount);
   Serial.print(" pick-confirmed at t=");
   Serial.println(millis());
-  //display.clear();
-  //display.print(F("Bins: "));
-  //display.print(binCount);
+  oled.print_bins(binCount);
+
+  /*  had to write the print_bins(numBins) method in PrintOLED.cpp to access the display
+  and move these to there instead 
+  display.clear();
+  display.print(F("Bins: "));
+  display.print(binCount);
+  */
   unsigned long spinStart = millis();
   // refine or try goToAngle ? 
   while (millis() - spinStart < 3600) {
