@@ -45,7 +45,7 @@ int16_t encCountsLeft = 0, encCountsRight = 0;
 float x, y, theta;  //to I need to set initial x & y to 10?  ****
 
 // wall following variables
-const double goalWallDist=10.0; // Goal distance from wall (cm)
+const double goalWallDist=14.0; // Goal distance from wall (cm), greater than 10 since using 135degree angle
 double actualWallDist;
 int state = WALL_FOLLOWING;
 
