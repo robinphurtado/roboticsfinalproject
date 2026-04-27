@@ -74,7 +74,7 @@ int16_t robotPosition;
 bool justTurned = false;
 
 // wall following variables
-const double goalWallDist=10.0; // Goal distance from wall (cm)
+const double goalWallDist = 14.0; // Goal distance from wall (cm), greater than 10 since using 135degree angle
 double actualWallDist;
 int state = WALL_FOLLOWING;   // start in WALL_FOLLOWING state
 
