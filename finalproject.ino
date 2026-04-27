@@ -42,7 +42,10 @@ PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
 //odometry
 int16_t deltaL=0, deltaR=0;
 int16_t encCountsLeft = 0, encCountsRight = 0;
-float x, y, theta;  //to I need to set initial x & y to 10?  ****
+//float x, y, theta;  do I need to set initial x & y to 10?  
+float x = -10.0;
+float y = 10.0;
+float theta = 0.0;
 
 // wall following variables
 const double goalWallDist=14.0; // Goal distance from wall (cm), greater than 10 since using 135degree angle
@@ -78,8 +81,9 @@ void setup() {
 }
 
 void loop() {
-
-  odometry.printSerial();
+  //for troubleshooting. if values are duplicate, remove this one 4/27
+  Serial.print("At top of loop: ");
+  odometry.printSerial(x, y, theta);  //prints odometry, theta in degrees
 
   // WALL FOLLOW
   if (state == WALL_FOLLOWING) {
@@ -93,7 +97,7 @@ void loop() {
     encCountsLeft += deltaL;
     encCountsRight += deltaR;
     // update x,y, and theta 
-    odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);
+    odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);  //prints odom to OLED, theta in rad, calls printserial(), theta in degrees 
 
     //CELL TRACKING
     currentRow = (y-10)/CELL_SIZE;
@@ -198,6 +202,6 @@ void wallFollowing () {
   Serial.print(goalWallDist);
   Serial.print(" Actual: ");
   Serial.print(actualWallDist);
-  Serial.println(" PDout: ");
-  Serial.print(PDout);
+  Serial.print(" PDout: ");
+  Serial.println(PDout);
 }
