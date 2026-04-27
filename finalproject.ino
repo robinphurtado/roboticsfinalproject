@@ -36,8 +36,12 @@ Motors motors;
 Servo servo;
 Encoders encoders;
 Sonar sonar(4);
+// Odometry instance
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
+// PDController for obstacle avoidance
 PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
+// PoluluBuzzer for beep when done
+PololuBuzzer buzzer;
 
 //odometry
 int16_t deltaL=0, deltaR=0;
@@ -151,11 +155,68 @@ void loop() {
     //set current row and column to previous for next loop
     prevRow = currentRow;
     prevCol = currentCol;
-  }
+
+        //check if all are visited and advance
+    bool allVisited = true;
+    for (int r = 0; r < ROWS; r++) {
+      for (int c = 0; c < COLS; c++) {
+        // if current cell is not visited
+        if (visitedCells[r][c] == 'N') {
+          // set all visited to false, break out and continue
+          allVisited = false;
+          break;
+        }
+      }
+      // if allVisited is false, break out and continue
+      if (!allVisited) {
+        break;
+      }
+    }
+    // if allVisited is true, advance to return to dock
+    if (allVisited) {
+      state = RETURN_TO_DOCK;
+    }
+  } 
+
+///////////////////////////////THIS IS SUPER BUGGY!////////////////////////////////////////////
   
+  else if (state == RETURN_TO_DOCK) {
+    Serial.println("State: Return to Dock");
 
+    // does return to dock need a delay coming out of the turn?
+    // no since it isnt using wall following? 
 
+    // check if return to dock has already run
+    if (returnIndex < 0) {
+      returnIndex = currentMove - 1;
+      motors.setSpeeds(0, 0);
+      return;
 
+    // if we're back before the first move
+    } else if (returnIndex < 0) {
+      motors.setSpeeds(0, 0);
+      //#TODO turn this into a function //
+      buzzer.play("!L16 V8 fgab");
+      endTime = millis();
+      servo.write(90);
+      // need to make sure his position matches original
+      //does that mean turn around?
+      Serial.println("Docked");
+      Serial.print("Start Time: " );
+      Serial.println(startTime);
+      Serial.print("End Time: ");
+      Serial.println(endTime);
+      return;
+    }
+
+    char move = reverseMove(movementLog[returnIndex]);
+
+    executeMove(move);
+
+    returnIndex--;
+  } 
+///////////////////////////////////////////////////////////////////////////////////////////////
+  
   
 }
 
@@ -201,3 +262,82 @@ void wallFollowing () {
   Serial.println(" PDout: ");
   Serial.print(PDout);
 }
+
+/////////////////////NOT SURE ABOU THESE EITHER////////////////////////////////////////////////////
+
+/* write description for reversemove*/
+char reverseMove(char move) {
+  if (move == 'R') return 'L';
+  if (move == 'L') return 'R';
+  if (move == 'U') return 'D';
+  if (move == 'D') return 'U';
+  return 'X';
+}
+
+//helper normalizeAngle to help avoid wrap around of theta
+// write more 
+float normalizeAngle(float angle) {
+  while (angle > PI)  angle -= 2 * PI;
+  while (angle < -PI) angle += 2 * PI;
+  return angle;
+}
+
+/* write description for execute move*/
+void executeMove(char move) {
+
+  if (move == 'R') {
+    turnToAngle(0);      // east
+  } else if (move == 'L') {
+    turnToAngle(PI);     // west
+  } else if (move == 'U') {
+    turnToAngle(PI/2);   // north
+  } else if (move == 'D') {
+    turnToAngle(-PI/2);  // south
+  }
+
+  driveForwardOneCell();
+}
+
+/* write description for driveForwardOneCell */
+void driveForwardOneCell() {
+
+  float startX = x;
+  float startY = y;
+
+  while (true) {
+
+    deltaL = encoders.getCountsAndResetLeft();
+    deltaR = encoders.getCountsAndResetRight();
+    encCountsLeft += deltaL;
+    encCountsRight += deltaR;
+    odometry.update_odom(encCountsLeft, encCountsRight, x, y, theta);
+
+    // calcluate distance 
+    float dist = sqrt(pow(x - startX, 2) + pow(y - startY, 2));
+
+    if (dist >= CELL_SIZE) {
+      break;
+    }
+
+    motors.setSpeeds(base_speed, base_speed);
+  }
+
+  motors.setSpeeds(0, 0);
+}
+
+void turnToAngle(float targetTheta) {
+  while (fabs(normalizeAngle(theta - targetTheta)) > 0.1) {
+
+    deltaL = encoders.getCountsAndResetLeft();
+    deltaR = encoders.getCountsAndResetRight();
+    encCountsLeft += deltaL;
+    encCountsRight += deltaR;
+    odometry.update_odom(encCountsLeft, encCountsRight, x, y, theta);
+
+    motors.setSpeeds(80, -80);
+  }
+
+  motors.setSpeeds(0, 0);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
