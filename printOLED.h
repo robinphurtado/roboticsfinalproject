@@ -8,7 +8,8 @@ class PrintOLED{
     PrintOLED();
     void print_encoder(float L, float R);
     void print_float(float x);
-    void print_odom(float x, float y, float phi); 
+    void print_odom(float x, float y, float phi);
+    void print_bins(int bincount);
     
   private:
     int _lastUpdateTime;

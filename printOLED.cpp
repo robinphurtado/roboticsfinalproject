@@ -68,3 +68,10 @@ void PrintOLED::print_odom(float x, float y, float theta){
       display.print(buft);
   
 }
+
+void PrintOLED::print_bins(int numBins){
+  int _numBins = numBins;
+  display.clear();
+  display.print(F("Bins: "));
+  display.print(_numBins);
+}
