@@ -26,6 +26,7 @@ using namespace Pololu3piPlus32U4;
 #define WALL_FOLLOWING  0
 #define RETURN_TO_DOCK 2
 
+
 //maze navigation 
 #define CELL_SIZE 20
 #define ROWS 4
@@ -61,7 +62,8 @@ int prevCol = 0;
 int currentMove = 0;
 char visitedCells[ROWS][COLS];
 char movementLog[MAXMOVES];
-int returnIndex = -1;  //initialize with -1 so we know return to dock hasnt started yet
+int returnIndex = 0;  
+bool returnStarted = false; 
 
 // total timekeeping 
 unsigned long startTime, endTime;
@@ -186,13 +188,19 @@ void loop() {
     // does return to dock need a delay coming out of the turn?
     // no since it isnt using wall following? 
 
-    // check if return to dock has already run
-    if (returnIndex < 0) {
-      returnIndex = currentMove - 1;
+    // check if return to dock has started
+    if (!returnStarted) {
+      // stop robot
       motors.setSpeeds(0, 0);
+      // slight delay to settle
+      delay(200);
+      // set returnIndex to the last stored move
+      returnIndex = currentMove - 1;
+      // set returnStarted to true since we are starting the state
+      returnStarted = true;      
       return;
 
-    // if we're back before the first move
+    // finished stepping backwards through all moves
     } else if (returnIndex < 0) {
       motors.setSpeeds(0, 0);
       //#TODO turn this into a function //
@@ -206,6 +214,8 @@ void loop() {
       Serial.println(startTime);
       Serial.print("End Time: ");
       Serial.println(endTime);
+
+      
       return;
     }
 
