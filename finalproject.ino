@@ -25,6 +25,7 @@ using namespace Pololu3piPlus32U4;
 
 #define WALL_FOLLOWING  0
 #define RETURN_TO_DOCK 2
+#define DONE 5
 
 
 //maze navigation 
@@ -91,8 +92,9 @@ void loop() {
   if (state == WALL_FOLLOWING) {
     
     wallFollowing();
+    Serial.print("State: Wall Following");
 
-    // ODOMETRY
+    // odometry
     deltaL = encoders.getCountsAndResetLeft();
     deltaR = encoders.getCountsAndResetRight();
     // Increment total encoder count
@@ -185,6 +187,9 @@ void loop() {
   else if (state == RETURN_TO_DOCK) {
     Serial.println("State: Return to Dock");
 
+    // check for light brown dock
+    // if dock found, stop, beep, advance to done
+
     // does return to dock need a delay coming out of the turn?
     // no since it isnt using wall following? 
 
@@ -215,7 +220,7 @@ void loop() {
       Serial.print("End Time: ");
       Serial.println(endTime);
 
-      
+      state = DONE;
       return;
     }
 
@@ -226,7 +231,11 @@ void loop() {
     returnIndex--;
   } 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-  
+  else if (state == DONE) {
+    Serial.print("State: DONE");
+    halt();
+    // nothing happens here, do not pass go, do not advance to any more states
+  }
   
 }
 
@@ -351,3 +360,7 @@ void turnToAngle(float targetTheta) {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
+
+void halt() {
+  motors.setSpeeds(0,0);
+}
