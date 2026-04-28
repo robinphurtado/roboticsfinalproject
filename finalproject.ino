@@ -19,8 +19,8 @@ using namespace Pololu3piPlus32U4;
 //Update kp and kd based on your testing
 #define minOutput -100
 #define maxOutput 100
-#define kp 20 // starting with 20 which was decent for P controller
-#define kd 0 // starting with 0 as a base state
+#define kp 10 // starting with 20 which was decent for P controller
+#define kd 2 // starting with 0 as a base state
 #define base_speed 100
 
 #define WALL_FOLLOWING  0
@@ -73,7 +73,7 @@ void setup() {
   startTime = millis();
   //calibrate
   //Move Sonar to desired direction using Servo
-  servo.write(135);
+  servo.write(150);
   delay(2000);
   
   // mark starting cell as visited
@@ -193,8 +193,8 @@ void wallFollowing () {
   double PDout = PDcontroller.update(actualWallDist, goalWallDist); //uncomment if using PDcontroller 
 
   // adjust speeds and set motors
-  int16_t leftSpeed = constrain(base_speed + PDout, -400, 400);
-  int16_t rightSpeed = constrain(base_speed - PDout, -400, 400);
+  int16_t leftSpeed = constrain(base_speed - PDout, -400, 400);
+  int16_t rightSpeed = constrain(base_speed + PDout, -400, 400);
   motors.setSpeeds(leftSpeed, rightSpeed);
 
   //Also print outputs to serial monitor for testing purposes
