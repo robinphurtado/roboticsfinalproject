@@ -26,9 +26,18 @@ int calibrationSpeed = 50;
 #define kp 10 // starting with 20 which was decent for P controller
 #define kd 2 // starting with 0 as a base state
 #define base_speed 100
+#define fast_track_speed 350
+
+// line detection threshold contants
+#define LIGHT_BROWN_MIN_THRESHOLD 180
+#define LIGHT_BROWN_MAX_THRESHOLD 300
+#define DARK_BROWN_MIN_THRESHOLD 320
+#define DARK_BROWN_MAX_THRESHOLD 650
+#define BLACK_THRESHOLD 900
+
+#define CENTER_SENSOR 2
 
 //phase 3 constants
-#define BLACK_THRESHOLD 900
 #define NUM_BINS 3
 
 // state constants
@@ -52,11 +61,9 @@ Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
 PrintOLED oled;
 PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
 
-//phase 3 variables
+//bin collection
 int binCount = 0;
-
-//display.clear();
-bool isOnBlack;
+bool isOnBlack = false;
 
 //odometry
 int16_t deltaL=0, deltaR=0;
@@ -65,14 +72,18 @@ float x = 10.0;
 float y = 10.0; 
 float theta;  //to I need to set initial x & y to 10?  ****
 
-// array to hold the 5 line sensor values
+// array to hold the 5 line sensor values for location
 unsigned int lineSensorValues[5];
-unsigned int lineDetectionValues[5];  //what is this? 
+// array to hold the 5 line sensor values for amount of reflection
+unsigned int lineDetectionValues[5];  
 
 //line Following
 int lineCenter = 2000;
 int16_t robotPosition;
 bool justTurned = false;
+bool isOnDarkBrown= false;
+bool onFastTrack = false;
+
 
 // wall following variables
 const double goalWallDist = 14.0; // Goal distance from wall (cm), greater than 10 since using 135degree angle
@@ -118,31 +129,12 @@ void loop() {
     wallFollowing(); 
 
     //read for line
-    lineSensors.read(lineSensorValues);
+    lineSensors.readCalibrated(lineSensorValues);
     /*  changing so isOnBlack is only true when black is detected
     if (lineSensorValues[2] > BLACK_THRESHOLD){
       isOnBlack = true;
-    }
-      */
-    isOnBlack = lineSensorValues[2] > BLACK_THRESHOLD;
-
-    // if just turned but still on the black square, continue wall following
-    if (justTurned && isOnBlack){
-      return;    
-    }
-
-    // if just turned and no longer on black square, reset justTurned 
-    if (justTurned && !isOnBlack){
-      justTurned = false;        
-      return;    
-    }
-
-    // if not just turned and no longer on black square, 
-    if (!justTurned && isOnBlack){
-      state = PICK_SERVICE;        
-      return;    
-    }
-   
+    } */
+      
     // odometry
     // store and then reset current encoder counts
     deltaL = encoders.getCountsAndResetLeft();
@@ -153,6 +145,55 @@ void loop() {
     // update x,y, and theta 
     odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);
 
+
+    // set boolean to true if black line or dark brown line are detected
+    isOnBlack = lineSensorValues[CENTER_SENSOR] > BLACK_THRESHOLD;
+    // if dark line detected, set on fastTracks
+    isOnDarkBrown= (lineSensorValues[CENTER_SENSOR] > DARK_BROWN_MIN_THRESHOLD) && (lineSensorValues[CENTER_SENSOR] < DARK_BROWN_MAX_THRESHOLD);
+
+    // if just turned but still on the black square, continue wall following
+    if (justTurned && isOnBlack){
+      return;    
+    }
+    // if just turned and no longer on black square, reset justTurned 
+    if (justTurned && !isOnBlack){
+      justTurned = false;        
+      return;    
+    }
+    // if not just turned and black square detected, 
+    if (!justTurned && isOnBlack){
+      state = PICK_SERVICE;        
+      return;    
+    }
+
+    // if on fast track and line still sensed, stay at fast speed
+    if (isOnDarkBrown && onFastTrack){
+      return;
+    }
+    // if on fast track line no longer sensed, return to base speed 
+    if (!isOnDarkBrown && onFastTrack){
+    //set isOnFastTrack to false
+    onFastTrack = false;
+    //set speeds to base speed
+    motors.setSpeeds(base_speed, base_speed);
+    return;
+    }
+    // if on fastrack
+    if (isOnDarkBrown) {
+      motors.setSpeeds(fast_track_speed, fast_track_speed);
+      onFastTrack = true;
+      return;
+    }
+
+///////////////////////THIS ONLY IF WE HAVE A WALL FOLLOWING FALLBACK FOR RETURN TO DOCK, OTHERWISE THIS GOES IN RETURN TO DOCK /////////
+// find out expected final posture. facing wall, or starting stance? 
+    if((lineSensorValues[CENTER_SENSOR] > LIGHT_BROWN_MIN_THRESHOLD) && (lineSensorValues[CENTER_SENSOR] < LIGHT_BROWN_MAX_THRESHOLD)){
+      motors.setSpeeds(0, 0);
+      //state = DOCK; 
+      //return;
+    }
+///////////////////////////////////////////////////////////////////////////
+   
     //cell tracking
     // using int division to track current cell
     //starting of maze is lower right, x will be negative the whole time
@@ -164,7 +205,9 @@ void loop() {
     // if current row or column has changed
     if(currentRow != prevRow || currentCol != prevCol) {
     
-      //maybe add bounds checking
+      //maybe add bounds checking if so need to nest everything to print ] visted
+      /*if (currentRow >= 0 && currentRow < ROWS &&
+      currentCol >= 0 && currentCol < COLS){} */
       //if current cell has not been visited
       if (visitedCells[currentRow][currentCol] != 'V') { 
         // mark cell as visited
@@ -289,6 +332,8 @@ turn to signify collecting the bin ADD SOUND AND FIX DISPLAY. does not return a 
 void serviceBin() {
 
   motors.setSpeeds(0, 0);
+
+  /*  commenting this code out for now, in this branch just mainly testing line detections
   delay(200);
   binCount++;
   Serial.print("bin: ");
@@ -297,19 +342,19 @@ void serviceBin() {
   Serial.println(millis());
   oled.print_bins(binCount);
 
-  /*  had to write the print_bins(numBins) method in PrintOLED.cpp to access the display
-  and move these to there instead 
-  display.clear();
-  display.print(F("Bins: "));
-  display.print(binCount);
-  */
+  //  had to write the print_bins(numBins) method in PrintOLED.cpp to access the display
+  //and move these to there instead 
+  //display.clear();
+  //display.print(F("Bins: "));
+  //display.print(binCount);
+  //
   unsigned long spinStart = millis();
   // refine or try goToAngle ? 
   while (millis() - spinStart < 3600) {
     motors.setSpeeds(-80, 80);
 }
  motors.setSpeeds(0, 0);
- delay(300);
+ delay(300); */
 }
 
 /*calibrateSensors function calibrates the sensors for line detection.
