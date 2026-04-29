@@ -87,8 +87,8 @@ void loop() {
 
   // WALL FOLLOW
   if (state == WALL_FOLLOWING) {
-    
     wallFollowing();
+    Serial.print("State: Wall Following");
 
     // ODOMETRY
     deltaL = encoders.getCountsAndResetLeft();
