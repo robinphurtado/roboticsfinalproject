@@ -22,6 +22,7 @@ using namespace Pololu3piPlus32U4;
 #define kp 10 // starting with 20 which was decent for P controller
 #define kd 2 // starting with 0 as a base state
 #define base_speed 100
+#define calibrationSpeed 50
 
 #define WALL_FOLLOWING  0
 #define RETURN_TO_DOCK 2
@@ -38,6 +39,7 @@ Encoders encoders;
 Sonar sonar(4);
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
 PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
+LineSensors lineSensors;
 
 //odometry
 int16_t deltaL=0, deltaR=0;
@@ -62,6 +64,15 @@ char visitedCells[ROWS][COLS];
 char movementLog[MAXMOVES];
 int returnIndex = -1;  //initialize with -1 so we know return to dock hasnt started yet
 
+// array to hold the 5 line sensor values for location
+unsigned int lineSensorValues[5];
+// array to hold the 5 line sensor values for amount of reflection
+unsigned int lineDetectionValues[5];
+
+//line Following
+int lineCenter = 2000;
+int16_t robotPosition;
+
 // total timekeeping 
 unsigned long startTime, endTime;
 
@@ -71,7 +82,7 @@ void setup() {
   delay(40);
   initializeArray();
   startTime = millis();
-  //calibrate
+  calibrateSensors();
   //Move Sonar to desired direction using Servo
   servo.write(150);
   delay(2000);
@@ -204,4 +215,29 @@ void wallFollowing () {
   Serial.print(actualWallDist);
   Serial.print(" PDout: ");
   Serial.println(PDout);
+}
+
+void calibrateSensors()
+{
+  //TASK 2.1a
+  //Implement calibration for IR Sensors
+  //Hint: Have your robot turn to the left and right to calibrate sensors.
+  
+  // loop to control robot back and forth wiggle
+  for (int i = 0; i < 80; i++){
+    if(i < 20 || i >= 60)
+      // rotate left over line for 20 interations
+      motors.setSpeeds(-calibrationSpeed, calibrationSpeed);
+    else
+      // rotate right over the line for 20 iterations
+      motors.setSpeeds(calibrationSpeed, -calibrationSpeed);
+
+    //calibrate with sensors on
+    lineSensors.calibrate();
+
+    delay(20);
+    }
+
+  // stop robot when calibration is complete
+  motors.setSpeeds(0,0);
 }
