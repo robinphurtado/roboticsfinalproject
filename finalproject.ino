@@ -79,11 +79,16 @@ unsigned long startTime, endTime;
 void setup() {
   Serial.begin(9600);
   servo.attach(5);
-  delay(40);
-  initializeArray();
-  startTime = millis();
+  Serial.print("NEW CODE IS RUNNING");
+  
+  Serial.println("ABOUT TO CALIBRATE");
   calibrateSensors();
+  delay(40);
+  
+  Serial.println("CALIBRATION DONE");
+  
   //Move Sonar to desired direction using Servo
+  initializeArray();
   servo.write(150);
   delay(2000);
   
@@ -217,8 +222,8 @@ void wallFollowing () {
   Serial.println(PDout);
 }
 
-void calibrateSensors()
-{
+void calibrateSensors(){
+  Serial.println("INSIDE CALIBRATION");
   //TASK 2.1a
   //Implement calibration for IR Sensors
   //Hint: Have your robot turn to the left and right to calibrate sensors.
