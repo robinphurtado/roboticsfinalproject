@@ -29,6 +29,7 @@ using namespace Pololu3piPlus32U4;
 //phase 3 constants
 #define BLACK_THRESHOLD 900
 #define NUM_BINS 3
+#define CENTER_IR 2 //
 
 // state constants
 #define WALL_FOLLOWING  0
@@ -48,7 +49,7 @@ Servo servo;
 Encoders encoders;
 Sonar sonar(4);
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
-//OLED display;
+PrintOLED oled;
 PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
 // ***********to test beep when done after 3 bins collected*************
 // PoluluBuzzer for beep when done
@@ -103,121 +104,137 @@ void setup() {
   startTime = millis(); //record start time after calibration  
   servo.write(150); //Move Sonar to 150 degress to detect forward and to the left
   delay(200);
-  motors.setSpeeds(base_speed, base_speed);
+  //motors.setSpeeds(base_speed, base_speed);
   // mark starting cell as visited
   visitedCells[0][0] = 'V';
-  delay(1000);  // drive off start square
+  //delay(1000);  // drive off start square
 }
 
 void loop() {
   //for troubleshooting. if values are duplicate, remove this one 4/27
   Serial.print("At top of loop: ");
-  odometry.printSerial(); //print current x, y, theta
+  
+  //*************break this out to a method
+  // odometry
+  // store and then reset current encoder counts
+  deltaL = encoders.getCountsAndResetLeft();
+  deltaR = encoders.getCountsAndResetRight();
+  // Increment total encoder count
+  encCountsLeft += deltaL;
+  encCountsRight += deltaR;
+  // update x,y, and theta 
+  odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);  
+  //************************************
 
   // WALL FOLLOW
-  if (state == WALL_FOLLOWING) {    
-    Serial.print("State: Wall Following");
+  if (state == WALL_FOLLOWING) {
 
-    wallFollowing(); 
+    if(detectBlackBin()) {
+      motors.setSpeeds(0,0);
+      state = PICK_SERVICE;
+      return;
 
-    //read for line
-    lineSensors.read(lineSensorValues);
-    /*  changing so isOnBlack is only true when black is detected
-    if (lineSensorValues[2] > BLACK_THRESHOLD){
-      isOnBlack = true;
-    } */
+    } else {  
+      Serial.print("State: Wall Following");
 
-    // odometry
-    // store and then reset current encoder counts
-    deltaL = encoders.getCountsAndResetLeft();
-    deltaR = encoders.getCountsAndResetRight();
-    // Increment total encoder count
-    encCountsLeft += deltaL;
-    encCountsRight += deltaR;
-    // update x,y, and theta 
-    odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);  
+      wallFollowing(); 
+
+      //read for line
+      //*****************************************************************************
+      // lineSensors.read(lineSensorValues); <- this was incorrect, we were reading raw
+      // values again. Instead this call should have been readCalibrated, which is now
+      // embedded in detectBlackBin()
+      /*  changing so isOnBlack is only true when black is detected
+      if (lineSensorValues[2] > BLACK_THRESHOLD){
+        isOnBlack = true;
+      } 
 
 
-    isOnBlack = lineSensorValues[2] > BLACK_THRESHOLD;
+      isOnBlack = lineSensorValues[2] > BLACK_THRESHOLD;
 
-    // if just turned but still on the black square, continue wall following
-    if (justTurned && isOnBlack){
-      return;    
-    }
+      */
+      //********************************************************************
 
-    // if just turned and no longer on black square, reset justTurned 
-    if (justTurned && !isOnBlack){
-      justTurned = false;        
-      return;    
-    }
-
-    // if not just turned and no longer on black square, 
-    if (!justTurned && isOnBlack){
-      state = PICK_SERVICE;        
-      return;    
-    }
-   
-
-    //cell tracking
-    // using int division to track current cell
-    //starting of maze is lower right, x will be negative the whole time
-    currentRow = (y-10)/CELL_SIZE;
-    currentCol = (-x-10)/CELL_SIZE; //reversing sign for positive col#s recorded/ reversing pos direction of x axis
-    
-
-    // break this out to a function ?
-    // if current row or column has changed
-    if(currentRow != prevRow || currentCol != prevCol) {
-    
-      //maybe add bounds checking
-      //if current cell has not been visited
-      if (visitedCells[currentRow][currentCol] != 'V') { 
-        // mark cell as visited
-        visitedCells[currentRow][currentCol] = 'V';
-        // print new cell row and col visited
-        Serial.print("cell [");
-        Serial.print(currentRow);
-        Serial.print("][");
-        Serial.print(currentCol);
-        Serial.println("] visited");
+      // if just turned but still on the black square, continue wall following
+      if (justTurned && isOnBlack){
+        return;    
       }
-      // MOVE TRACKING
-      // if current column# is greater than prev column#
-      if (currentCol > prevCol) {
-        // robot came from right (x axis is reversed)
-        movementLog[currentMove] = 'R';
-        Serial.print(currentMove);
-        Serial.println(" R");
-        currentMove++;
-        // if current column# is less than prev column#
-      } else if (currentCol < prevCol) {
-        // robot came from left (x axis is reversed)
-        movementLog[currentMove] = 'L';        
-        Serial.print(currentMove);
-        Serial.println(" L");
-        currentMove++;
-        // if current row is greater than previous row
-      } else if (currentRow > prevRow) {
-        // robot traveled up
-        movementLog[currentMove] = 'U';
-        Serial.print(currentMove);
-        Serial.println(" U");
-        currentMove++;
-        // if current row is less than previous row
-      } else if (currentRow < prevRow) {
-        // robot traveled down 
-        movementLog[currentMove] = 'D';
-        Serial.print(currentMove);
-        Serial.println(" D");
-        currentMove++;
+
+      // if just turned and no longer on black square, reset justTurned 
+      if (justTurned && !isOnBlack){
+        justTurned = false;        
+        return;    
       }
-      // for troubleshooting REMOVE LATER 
-      Serial.print("Current Move: ");
-      Serial.println(currentMove);
-    }    
-    //set current row and column to previous for next loop
-    prevRow = currentRow;
-    prevCol = currentCol;
+
+      // if not just turned and no longer on black square, 
+      if (!justTurned && isOnBlack){
+        state = PICK_SERVICE;        
+        return;    
+      }
+    
+//**********************break this out to a cell tracking method***********************
+      //cell tracking
+      // using int division to track current cell
+      //starting of maze is lower right, x will be negative the whole time
+      currentRow = (y-10)/CELL_SIZE;
+      currentCol = (-x-10)/CELL_SIZE; //reversing sign for positive col#s recorded/ reversing pos direction of x axis
+      
+
+      // break this out to a function ?
+      // if current row or column has changed
+      if(currentRow != prevRow || currentCol != prevCol) {
+      
+        //maybe add bounds checking
+        //if current cell has not been visited
+        if (visitedCells[currentRow][currentCol] != 'V') { 
+          // mark cell as visited
+          visitedCells[currentRow][currentCol] = 'V';
+          // print new cell row and col visited
+          Serial.print("cell [");
+          Serial.print(currentRow);
+          Serial.print("][");
+          Serial.print(currentCol);
+          Serial.println("] visited");
+        }
+        // MOVE TRACKING
+        // if current column# is greater than prev column#
+        if (currentCol > prevCol) {
+          // robot came from right (x axis is reversed)
+          movementLog[currentMove] = 'R';
+          Serial.print(currentMove);
+          Serial.println(" R");
+          currentMove++;
+          // if current column# is less than prev column#
+        } else if (currentCol < prevCol) {
+          // robot came from left (x axis is reversed)
+          movementLog[currentMove] = 'L';        
+          Serial.print(currentMove);
+          Serial.println(" L");
+          currentMove++;
+          // if current row is greater than previous row
+        } else if (currentRow > prevRow) {
+          // robot traveled up
+          movementLog[currentMove] = 'U';
+          Serial.print(currentMove);
+          Serial.println(" U");
+          currentMove++;
+          // if current row is less than previous row
+        } else if (currentRow < prevRow) {
+          // robot traveled down 
+          movementLog[currentMove] = 'D';
+          Serial.print(currentMove);
+          Serial.println(" D");
+          currentMove++;
+        }
+        // for troubleshooting REMOVE LATER 
+        Serial.print("Current Move: ");
+        Serial.println(currentMove);
+      }    
+      //set current row and column to previous for next loop
+      prevRow = currentRow;
+      prevCol = currentCol;
+//*********************************************************************************     
+  }
 
   // STATE PICK SERVICE
   } else if (state == PICK_SERVICE) {
@@ -305,9 +322,10 @@ void serviceBin() {
   Serial.print(binCount);
   Serial.print(" pick-confirmed at t=");
   Serial.println(millis());
-  //display.clear();
+  //display.clear();  //this is insdie the print_bins function now
   //display.print(F("Bins: "));
   //display.print(binCount);
+  oled.print_bins(binCount);
   unsigned long spinStart = millis();
   // refine or try goToAngle ? 
   while (millis() - spinStart < 3600) {
@@ -336,4 +354,13 @@ void calibrateSensors()
   }
   // stop robot when calibration is complete
   motors.setSpeeds(0,0);
+}
+
+/*detectBlackBin function  */
+bool detectBlackBin(){
+  // read the calibrated values
+  lineSensors.readCalibrated(lineSensorValues);
+  // returns true if center IR detects value over black threshold
+  return lineSensorValues[CENTER_IR] > BLACK_THRESHOLD; 
+
 }
