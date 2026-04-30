@@ -97,13 +97,13 @@ unsigned long startTime, endTime;
 
 void setup() {
   Serial.begin(9600);
-  servo.attach(5);
-  delay(40);
-  initializeArray();    
+  servo.attach(5);   
   calibrateSensors();
+  delay(40);
   startTime = millis(); //record start time after calibration  
   servo.write(150); //Move Sonar to 150 degress to detect forward and to the left
   delay(200);
+  initializeArray(); 
   //motors.setSpeeds(base_speed, base_speed);
   // mark starting cell as visited
   visitedCells[0][0] = 'V';
