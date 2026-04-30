@@ -13,9 +13,14 @@ class Odometry{
 
     float convertToRadian(float angle);
 
+    float Odometry::normalizeAngle(float angle);
+
     //function printSerial() prints out the tuple [x, y, theta] to the serial monitor
     //called by update_odom
     void printSerial();
+
+    // overloaded function passing x, y, and theta to printSerial
+    void Odometry::printSerial(float x, float y, float theta);
 
     // overloaded function to print out the encoderCounts to the Serial Monitor
     void printSerial(int16_t encCountsLeft, int16_t encCountsRight);

@@ -74,6 +74,19 @@ void Odometry::printSerial(){
   Serial.println("]");
 }
 
+// overloaded function
+void Odometry::printSerial(float x, float y, float theta){
+  float angle = convertToDegrees(theta);  
+  Serial.print("[x:"); 
+  Serial.print(x, 3);
+  Serial.print(", y:");
+  Serial.print(y, 3);
+  Serial.print(", theta: ");
+  Serial.print(angle, 3); 
+  Serial.println("]");
+   Serial.println("------------------");
+}
+
 //overloaded version
 void Odometry::printSerial(int16_t encCountsLeft, int16_t encCountsRight){
   Serial.print(encCountsLeft);
@@ -100,6 +113,7 @@ void Odometry::update_odom(int left_encoder_counts, int right_encoder_counts, fl
     _theta += angleRate * 0.0001;
   }else{// OTHERWISE, CALCULATE THE ANGLE _theta FROM ENCODERS
     _theta += (deltaR-deltaL)/_w;
+    _theta = normalizeAngle(_theta);  //save normalized theta
   }  
 
   // CALCULATE _x BASED ON THE FORMULA FROM THE LECTURES
@@ -122,12 +136,19 @@ void Odometry::update_odom(int left_encoder_counts, int right_encoder_counts, fl
   printOLED.print_odom(x, y, theta);
 
   // PRINT THE x, y, theta VALUES ON SERIAL MONITOR
+  // for troubleshooting  4/27
+  Serial.print("In update odom: ");
+  // PRINT THE x, y, theta VALUES ON SERIAL MONITOR
   Odometry::printSerial();
 
   // Save the current encoder values as the "previous" values, so you can use it in the next iteration
   _left_encoder_counts_prev = left_encoder_counts;
   _right_encoder_counts_prev = right_encoder_counts;
-
 //*/
+}
 
+float Odometry::normalizeAngle(float angle) {
+  while (angle > PI)  angle -= 2 * PI;
+  while (angle < -PI) angle += 2 * PI;
+  return angle;
 }

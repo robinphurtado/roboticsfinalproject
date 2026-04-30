@@ -4,12 +4,10 @@
 #include "sonar.h"
 #include "PDcontroller.h"
 #include "odometry.h"
+#include "printOLED.h"
 
 
 using namespace Pololu3piPlus32U4;
-
-//Calibration
-int calibrationSpeed = 50;
 
 //Odometry Parameters
 #define diaL 3.2
@@ -26,6 +24,7 @@ int calibrationSpeed = 50;
 #define kp 10 // starting with 20 which was decent for P controller
 #define kd 2 // starting with 0 as a base state
 #define base_speed 100
+#define calibrationSpeed 50
 
 //phase 3 constants
 #define BLACK_THRESHOLD 900
@@ -51,6 +50,9 @@ Sonar sonar(4);
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING);
 //OLED display;
 PDcontroller PDcontroller(kp, kd, minOutput, maxOutput);
+// ***********to test beep when done after 3 bins collected*************
+// PoluluBuzzer for beep when done
+//PololuBuzzer buzzer;
 
 //phase 3 variables
 int binCount = 0;
@@ -60,13 +62,14 @@ bool isOnBlack;
 //odometry
 int16_t deltaL=0, deltaR=0;
 int16_t encCountsLeft = 0, encCountsRight = 0;
-float x = 10.0;
+float x = -10.0;
 float y = 10.0; 
-float theta;  //to I need to set initial x & y to 10?  ****
+float theta = 0.0;  //to I need to set initial x & y to 10?  ****
 
-// array to hold the 5 line sensor values
+// array to hold the 5 line sensor values for location
 unsigned int lineSensorValues[5];
-unsigned int lineDetectionValues[5];  //what is this? 
+// array to hold the 5 line sensor values for amount of reflection
+unsigned int lineDetectionValues[5];  
 
 //line Following
 int lineCenter = 2000;
@@ -86,7 +89,7 @@ int prevCol = 0;
 int currentMove = 0;  
 char visitedCells[ROWS][COLS];
 char movementLog[MAXMOVES];
-int returnIndex = -1;  //initialize with -1 so we know return to dock hasn't started yet
+int returnIndex = -1;  //CHANGED THIS IN RETURN BRANCH
 
 // total timekeeping 
 unsigned long startTime, endTime;
@@ -95,22 +98,23 @@ void setup() {
   Serial.begin(9600);
   servo.attach(5);
   delay(40);
-  initializeArray();  
-  startTime = millis(); //record start time
-  calibrateSensors();  
-  servo.write(135); //Move Sonar to 135 degress to detect forward and to the left
+  initializeArray();    
+  calibrateSensors();
+  startTime = millis(); //record start time after calibration  
+  servo.write(150); //Move Sonar to 150 degress to detect forward and to the left
   delay(200);
   motors.setSpeeds(base_speed, base_speed);
-  delay(1000);  // drive off start square
   // mark starting cell as visited
   visitedCells[0][0] = 'V';
+  delay(1000);  // drive off start square
 }
 
 void loop() {
-
+  //for troubleshooting. if values are duplicate, remove this one 4/27
+  Serial.print("At top of loop: ");
   odometry.printSerial(); //print current x, y, theta
 
-  // STATE WALL FOLLOWING 
+  // WALL FOLLOW
   if (state == WALL_FOLLOWING) {    
     Serial.print("State: Wall Following");
 
@@ -121,8 +125,19 @@ void loop() {
     /*  changing so isOnBlack is only true when black is detected
     if (lineSensorValues[2] > BLACK_THRESHOLD){
       isOnBlack = true;
-    }
-      */
+    } */
+
+    // odometry
+    // store and then reset current encoder counts
+    deltaL = encoders.getCountsAndResetLeft();
+    deltaR = encoders.getCountsAndResetRight();
+    // Increment total encoder count
+    encCountsLeft += deltaL;
+    encCountsRight += deltaR;
+    // update x,y, and theta 
+    odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);  
+
+
     isOnBlack = lineSensorValues[2] > BLACK_THRESHOLD;
 
     // if just turned but still on the black square, continue wall following
@@ -142,15 +157,6 @@ void loop() {
       return;    
     }
    
-    // odometry
-    // store and then reset current encoder counts
-    deltaL = encoders.getCountsAndResetLeft();
-    deltaR = encoders.getCountsAndResetRight();
-    // Increment total encoder count
-    encCountsLeft += deltaL;
-    encCountsRight += deltaR;
-    // update x,y, and theta 
-    odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);
 
     //cell tracking
     // using int division to track current cell
@@ -205,6 +211,9 @@ void loop() {
         Serial.println(" D");
         currentMove++;
       }
+      // for troubleshooting REMOVE LATER 
+      Serial.print("Current Move: ");
+      Serial.println(currentMove);
     }    
     //set current row and column to previous for next loop
     prevRow = currentRow;
@@ -232,6 +241,8 @@ void loop() {
 
     // for now just stop, later implement code for returning
     motors.setSpeeds(0, 0);
+    //*******************************************************
+    //buzzer.play("!L16 V8 fgab");
 
   }  
 }
