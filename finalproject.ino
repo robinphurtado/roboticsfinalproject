@@ -11,6 +11,7 @@ using namespace Pololu3piPlus32U4;
 LineSensors lineSensors;
 Motors motors;
 Encoders encoders;
+Servo servo;
 Sonar sonar(4);
  
 // ---------------------------------------------------------------------------
@@ -55,6 +56,7 @@ unsigned int lineSensorValues[5];
 double actualWallDist;
 int binCount = 0;
 bool leftStartZone = false;
+PololuBuzzer buzzer;
  
 // timekeeping
 unsigned long startTime, endTime;
@@ -69,17 +71,26 @@ void serviceBin();
 // setup()
 void setup() {
   Serial.begin(9600);
+  servo.attach(5);
+  delay(40);
+
   Serial.println("Starting in 3 seconds...");
-  delay(3000);
- 
+  delay(3000); 
   Serial.println("Calibrating...");
+  
   calibrateSensors();
   Serial.println("Calibration done.");
- 
   motors.setSpeeds(0, 0);
   delay(500);
- 
+
+  //record start time
   startTime = millis();
+
+  servo.write(150);
+  //drive off calibration cell - split out to a 'clear cell' state? odom is not accruing here
+  motors.setSpeeds(BASE_SPEED, BASE_SPEED);
+  delay(1000);  // drive off start square 
+  
   Serial.println("Starting wall following.");
 }
  
@@ -114,6 +125,11 @@ void loop() {
     if (binCount >= NUM_BINS) {
       // all bins collected — switch to return to dock
       Serial.println("All bins collected. Returning to dock.");
+
+    //drive off last bin before going to return to doc so we dont sense for light brown early - split out to a 'clear cell' state?
+    //but the fact that it is sensing the last black bin as light brown means light brown is not working properly
+    motors.setSpeeds(BASE_SPEED, BASE_SPEED);
+    delay(1000);  // drive off start square 
       state = RETURN_TO_DOCK;
     } else {
       state = WALL_FOLLOWING;
@@ -130,6 +146,13 @@ void loop() {
  
     Serial.print("Return IR: ");
     Serial.println(centerVal);
+
+///*//******************************Added 5/2**************************************************
+    // dont detect dock until robot has seen white floor after last bin
+    if (centerVal < BLACK_THRESHOLD - 200) {
+      leftStartZone = true;
+    }
+//*/*********************************************************************************************
  
     // detect light brown dock square
     if (centerVal >= LIGHT_BROWN_MIN && centerVal <= LIGHT_BROWN_MAX) {
@@ -141,6 +164,7 @@ void loop() {
     // stop and signal completion
     motors.setSpeeds(0, 0);
     endTime = millis();
+    buzzer.playNote(NOTE_F(4), 2000, 10);
  
     Serial.println("Docked.");
     Serial.print("Start time: ");
@@ -182,8 +206,12 @@ void wallFollowing() {
  
   double PDout = PDcontroller.update(actualWallDist, GOAL_WALL_DIST);
  
-  int16_t leftSpeed  = constrain(BASE_SPEED + PDout, -400, 400);
-  int16_t rightSpeed = constrain(BASE_SPEED - PDout, -400, 400);
+  // int16_t leftSpeed  = constrain(BASE_SPEED + PDout, -400, 400);
+  // int16_t rightSpeed = constrain(BASE_SPEED - PDout, -400, 400);
+//reversing to test 
+  int16_t leftSpeed  = constrain(BASE_SPEED - PDout, -400, 400);
+  int16_t rightSpeed = constrain(BASE_SPEED + PDout, -400, 400);
+
   motors.setSpeeds(leftSpeed, rightSpeed);
  
   Serial.print("PDout: ");
@@ -196,7 +224,7 @@ void serviceBin() {
   delay(300);
  
   binCount++;
-  Serial.print("bin ");
+  Serial.print("bin: ");
   Serial.print(binCount);
   Serial.print(" pick-confirmed at t=");
   Serial.println(millis());
