@@ -3,6 +3,7 @@
 #include "sonar.h"
 #include "PDcontroller.h"
 #include "printOLED.h"
+#include "odometry.h"
  
 using namespace Pololu3piPlus32U4;
  
@@ -22,6 +23,21 @@ PrintOLED oled;
  
 // Calibration
 #define CALIBRATION_SPEED 50
+
+//Odometry
+#define diaL 3.2
+#define diaR  3.2
+#define nL 12
+#define nR 12
+#define w 9.6
+#define gearRatio 75
+#define DEAD_RECKONING false
+
+//maze navigation 
+#define CELL_SIZE 20
+#define ROWS 4
+#define COLS 9
+#define MAXMOVES 200
  
 // Wall following PD
 #define BASE_SPEED     120
@@ -59,10 +75,30 @@ double actualWallDist;
 int binCount = 0;
 bool leftStartZone = false;
 PololuBuzzer buzzer;
+bool returning = false; //**
+
+//odometry **
+int16_t deltaL=0, deltaR=0;
+int16_t encCountsLeft = 0, encCountsRight = 0; 
+float x = -10.0;
+float y = 10.0;
+float theta = 0.0;
+
+// movement tracking **
+char visitedCells[ROWS][COLS];
+char movementLog[MAXMOVES];
+
+int currentRow = 0;  //should these be local? 
+int currentCol = 0;
+int prevRow = 0;
+int prevCol = 0;
+int currentMove = 0;
+int returnIndex = 0;  //pretty sure change this to a bool and it should start at 0
  
 // timekeeping
 unsigned long startTime, endTime;
- 
+
+Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING); //** 
 PDcontroller PDcontroller(KP, KD, MIN_OUTPUT, MAX_OUTPUT);
  
 // Function Prototypes
@@ -81,24 +117,40 @@ void setup() {
   Serial.println("Calibrating...");  
   calibrateSensors();
   Serial.println("Calibration done.");
-
+  servo.write(150);
   motors.setSpeeds(0, 0);
   delay(500);
 
   //record start time
   startTime = millis();
 
-  servo.write(150);
+  
   //drive off calibration cell - split out to a 'clear cell' state? odom is not accruing here
   // or split out to the beginning of wall following
   motors.setSpeeds(BASE_SPEED, BASE_SPEED);
   delay(1000);  // drive off start square 
+
+  // mark starting cell as visited***
+  visitedCells[0][0] = 'V';
   
   Serial.println("Starting wall following.");
 }
  
 // loop()
 void loop() {
+
+    //update odometryxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  // ODOMETRY
+    deltaL = encoders.getCountsAndResetLeft();
+    deltaR = encoders.getCountsAndResetRight();
+    // Increment total encoder count
+    encCountsLeft += deltaL;
+    encCountsRight += deltaR;
+    // update x,y, and theta 
+    //prints odom to OLED, theta in rad, calls printserial(), theta in degrees 
+    odometry.update_odom(encCountsLeft,encCountsRight, x, y, theta);  
+
+  //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
  
   if (state == WALL_FOLLOWING) {
  
@@ -139,6 +191,20 @@ void loop() {
     }
  
   } else if (state == RETURN_TO_DOCK) {
+
+    //***********************
+    returning = true;
+
+    // robot ends after last bin pickup for navigated to last cell and in theory is facing forward
+    // turn 180 degrees to face the other direction. SPIN_TIME is calc for 360, SPIN_TIME/2 should be ~180. wall following should straighten robot
+    unsigned long spinStart = millis();
+    while (millis() - spinStart < SPIN_TIME/2) {
+      motors.setSpeeds(-80, 80);
+    }
+    motors.setSpeeds(0, 0); 
+    // pause to let sonar stabilize after spin
+    delay(800);
+    //******************
  
     // continue wall following back to dock
     wallFollowing();
@@ -179,6 +245,65 @@ void loop() {
  
     while (true) {} // halt
   }
+
+   //CELL TRACKINGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+  currentRow = (y-10)/CELL_SIZE;
+  currentCol = (-x-10)/CELL_SIZE; //reversing sign for positive col#s recorded/ reversing pos direction of x axis
+
+      // break this out to a function ?
+    // if current row or column has changed
+    if(currentRow != prevRow || currentCol != prevCol) {
+    
+      //maybe add bounds checking
+      //if current cell has not been visited
+      if (visitedCells[currentRow][currentCol] != 'V') {
+        // mark cell as visited 
+        visitedCells[currentRow][currentCol] = 'V';
+        // print new cell row and col visited
+        Serial.print("cell [");
+        Serial.print(currentRow);
+        Serial.print("][");
+        Serial.print(currentCol);
+        Serial.println("] visited");
+      }
+         // MOVE TRACKING
+      // if current column# is greater than prev column#
+      if (currentCol > prevCol) {
+        // robot came from right (x axis is reversed)
+        movementLog[currentMove] = 'R';
+        Serial.print(currentMove);
+        Serial.println(" R");
+        currentMove++;
+        // if current column# is less than prev column#
+      } else if (currentCol < prevCol) {
+        // robot came from left (x axis is reversed)
+        movementLog[currentMove] = 'L';
+        Serial.print(currentMove);
+        Serial.println(" L");
+        currentMove++;
+        // if current row is greater than previous row
+      } else if (currentRow > prevRow) {
+        // robot traveled up
+        movementLog[currentMove] = 'U';
+        Serial.print(currentMove);
+        Serial.println(" U");
+        currentMove++;
+        // if current row is less than previous row
+      } else if (currentRow < prevRow) {
+        // robot traveled down
+        movementLog[currentMove] = 'D';
+        Serial.print(currentMove);
+        Serial.println(" D");
+        currentMove++;
+      }
+    }
+    
+    //set current row and column to previous for next loop
+    prevRow = currentRow;
+    prevCol = currentCol;
+
+  //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 }
  
 // calibrateSensors()
