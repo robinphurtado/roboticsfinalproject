@@ -74,6 +74,7 @@ void serviceBin();
 void setup() {
   Serial.begin(9600);
   servo.attach(5);
+
   delay(40);
 
   Serial.println("Starting in 3 seconds...");
@@ -89,10 +90,11 @@ void setup() {
   startTime = millis();
 
   servo.write(150);
+
   //drive off calibration cell - split out to a 'clear cell' state? odom is not accruing here
   // or split out to the beginning of wall following
   motors.setSpeeds(BASE_SPEED, BASE_SPEED);
-  delay(1000);  // drive off start square 
+  delay(600);  // drive off start square tried 600 ms, 1000 maybe too long
   
   Serial.println("Starting wall following.");
 }
@@ -129,10 +131,13 @@ void loop() {
       // all bins collected — switch to return to dock
       Serial.println("All bins collected. Returning to dock.");
 
+      //turn 180 TODO
+
     //drive off last bin before going to return to doc so we dont sense for light brown early - split out to a 'clear cell' state?
     //but the fact that it is sensing the last black bin as light brown means light brown is not working properly
     motors.setSpeeds(BASE_SPEED, BASE_SPEED);
     delay(1000);  // drive off start square 
+
       state = RETURN_TO_DOCK;
     } else {
       state = WALL_FOLLOWING;
@@ -167,6 +172,7 @@ void loop() {
     // stop and signal completion
     motors.setSpeeds(0, 0);
     endTime = millis();
+    servo.write(90);
     buzzer.playNote(NOTE_F(4), 2000, 10);
  
     Serial.println("Docked.");
@@ -209,11 +215,11 @@ void wallFollowing() {
  
   double PDout = PDcontroller.update(actualWallDist, GOAL_WALL_DIST);
  
-  // int16_t leftSpeed  = constrain(BASE_SPEED + PDout, -400, 400);
-  // int16_t rightSpeed = constrain(BASE_SPEED - PDout, -400, 400);
+   int16_t leftSpeed  = constrain(BASE_SPEED + PDout, -400, 400);
+   int16_t rightSpeed = constrain(BASE_SPEED - PDout, -400, 400);
 //reversing to test 
-  int16_t leftSpeed  = constrain(BASE_SPEED - PDout, -400, 400);
-  int16_t rightSpeed = constrain(BASE_SPEED + PDout, -400, 400);
+  // int16_t leftSpeed  = constrain(BASE_SPEED - PDout, -400, 400);
+  // int16_t rightSpeed = constrain(BASE_SPEED + PDout, -400, 400);
 
   motors.setSpeeds(leftSpeed, rightSpeed);
  

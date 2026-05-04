@@ -35,7 +35,8 @@ double PDcontroller::update(double value, double target_value){
     _clampOut = constrain(_output, _minOutput, _maxOutput);
 
     _prevTime = currTime;
-    _prevError = _error;
+    //_prevError = _error;
+    _prevError = 0.0;  //switched to IsasCode
   
     // return clamped output
     return _clampOut;
