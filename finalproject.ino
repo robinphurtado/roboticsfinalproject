@@ -334,11 +334,11 @@ void wallFollowing() {
  
   double PDout = PDcontroller.update(actualWallDist, GOAL_WALL_DIST);
  
-  // int16_t leftSpeed  = constrain(BASE_SPEED + PDout, -400, 400);
-  // int16_t rightSpeed = constrain(BASE_SPEED - PDout, -400, 400);
+   int16_t leftSpeed  = constrain(BASE_SPEED + PDout, -400, 400);
+   int16_t rightSpeed = constrain(BASE_SPEED - PDout, -400, 400);
 //reversing to test 
-  int16_t leftSpeed  = constrain(BASE_SPEED - PDout, -400, 400);
-  int16_t rightSpeed = constrain(BASE_SPEED + PDout, -400, 400);
+  // int16_t leftSpeed  = constrain(BASE_SPEED - PDout, -400, 400);
+  // int16_t rightSpeed = constrain(BASE_SPEED + PDout, -400, 400);
 
   motors.setSpeeds(leftSpeed, rightSpeed);
  
