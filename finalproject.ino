@@ -2,6 +2,7 @@
 #include <Servo.h>
 #include "sonar.h"
 #include "PDcontroller.h"
+#include "printOLED.h"
  
 using namespace Pololu3piPlus32U4;
  
@@ -13,6 +14,7 @@ Motors motors;
 Encoders encoders;
 Servo servo;
 Sonar sonar(4);
+PrintOLED oled;
  
 // ---------------------------------------------------------------------------
 // Parameters
@@ -30,7 +32,7 @@ Sonar sonar(4);
 #define GOAL_WALL_DIST 20.0   // cm
  
 // Phase 3: Bin detection
-#define BLACK_THRESHOLD 800   // calibrated IR value for black square (0-1000)
+#define BLACK_THRESHOLD 900   // calibrated IR value for black square (0-1000)
 #define NUM_BINS        3     // total bins to collect
 #define SPIN_TIME       4200  // ms for full 360 degree spin
 #define FORWARD_TIME    600   // ms to drive forward off bin square
@@ -76,10 +78,10 @@ void setup() {
 
   Serial.println("Starting in 3 seconds...");
   delay(3000); 
-  Serial.println("Calibrating...");
-  
+  Serial.println("Calibrating...");  
   calibrateSensors();
   Serial.println("Calibration done.");
+
   motors.setSpeeds(0, 0);
   delay(500);
 
@@ -88,6 +90,7 @@ void setup() {
 
   servo.write(150);
   //drive off calibration cell - split out to a 'clear cell' state? odom is not accruing here
+  // or split out to the beginning of wall following
   motors.setSpeeds(BASE_SPEED, BASE_SPEED);
   delay(1000);  // drive off start square 
   

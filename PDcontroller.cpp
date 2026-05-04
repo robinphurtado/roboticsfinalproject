@@ -21,8 +21,8 @@ double PDcontroller::update(double value, double target_value){
   unsigned long currTime = millis();
 
   // calculate the error
-  //_error =  target_value - value;
-  _error = value - target_value;
+  _error =  target_value - value; //switched in Isas
+  //_error = value - target_value;
   
 
   // if prevTime == 0.00, this is the first run since it is
