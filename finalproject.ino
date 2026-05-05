@@ -4,6 +4,7 @@
 #include "PDcontroller.h"
 #include "printOLED.h"
 #include "odometry.h"
+#include "BrownLineFollower.h"
  
 using namespace Pololu3piPlus32U4;
  
@@ -43,6 +44,8 @@ PrintOLED oled;
 #define BASE_SPEED     120
 #define KP             12
 #define KD             2
+#define KP_LINE        10 //best from lab 9
+#define KD_LINE        6  //best from lab 9
 #define MIN_OUTPUT    -100
 #define MAX_OUTPUT     100
 #define GOAL_WALL_DIST 20.0   // cm
@@ -56,6 +59,10 @@ PrintOLED oled;
 // Phase 2: Return to dock
 #define LIGHT_BROWN_MIN 180   // lower bound for light brown dock square
 #define LIGHT_BROWN_MAX 300   // upper bound for light brown dock square
+
+// Phase #: Fast Track
+#define DARK_BROWN_MIN 320   // lower bound for dark brown dock square
+#define DARK_BROWN_MAX 650   // upper bound for dark brown dock square
  
 // ---------------------------------------------------------------------------
 // Robot States
@@ -64,6 +71,7 @@ PrintOLED oled;
 #define PICK_SERVICE    1
 #define RETURN_TO_DOCK  2
 #define DOCKED          3
+#define FAST_TRACK      4
  
 int state = WALL_FOLLOWING;
  
@@ -94,12 +102,21 @@ int prevRow = 0;
 int prevCol = 0;
 int currentMove = 0;
 int returnIndex = 0;  //pretty sure change this to a bool and it should start at 0
+
+//line following
+unsigned int lineDetectionValues[5];
+int16_t lineCenter = 2000;  //do a define instead?
+int16_t robotPosition;  //maybe dont need this
+uint16_t brownPosition;
+bool brownDetected = false;
  
 // timekeeping
 unsigned long startTime, endTime;
 
 Odometry odometry(diaL, diaR, w, nL, nR, gearRatio, DEAD_RECKONING); //** 
-PDcontroller PDcontroller(KP, KD, MIN_OUTPUT, MAX_OUTPUT);
+PDcontroller wallController(KP, KD, MIN_OUTPUT, MAX_OUTPUT);
+PDcontroller pd_brown(KP_LINE, KD_LINE, MIN_OUTPUT, MAX_OUTPUT);
+BrownLineFollower linefollower(lineSensors, DARK_BROWN_MIN, DARK_BROWN_MAX);
  
 // Function Prototypes
 void calibrateSensors();
@@ -153,16 +170,21 @@ void loop() {
   //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
  
   if (state == WALL_FOLLOWING) {
- 
-    wallFollowing();
- 
-    // read IR sensors
-    lineSensors.readCalibrated(lineSensorValues);
+
+        // read IR sensors & handle readoutxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+    //**BROWN FOLLOWING uncomment this and comment below to switch to brownlinefollower instead of reading the lineSensors directly
+    linefollower.readCalibrated(lineSensorValues);    
+    brownDetected = linefollower.computeLinePosition(lineSensorValues, brownPosition);
+
+    //**BROWN FOLLOWING comment out next line
+    //lineSensors.readCalibrated(lineSensorValues);
+
     unsigned int centerVal = lineSensorValues[2];
  
     Serial.print("Center IR: ");
     Serial.println(centerVal);
- 
+
     // dont detect bins until robot has seen white floor after start or last bin
     if (centerVal < BLACK_THRESHOLD - 200) {
       leftStartZone = true;
@@ -172,6 +194,30 @@ void loop() {
     if (leftStartZone && centerVal > BLACK_THRESHOLD && binCount < NUM_BINS) {
       state = PICK_SERVICE;
     }
+
+    //**BROWN FOLLOWING uncomment this 
+    if (brownDetected){
+      state = FAST_TRACK;
+    }
+ 
+    wallFollowing();
+ 
+    // // read IR sensors
+    // lineSensors.readCalibrated(lineSensorValues);
+    // unsigned int centerVal = lineSensorValues[2];
+ 
+    // Serial.print("Center IR: ");
+    // Serial.println(centerVal);
+ 
+    // // dont detect bins until robot has seen white floor after start or last bin
+    // if (centerVal < BLACK_THRESHOLD - 200) {
+    //   leftStartZone = true;
+    // }
+ 
+    // // detect black square bin — only if bins still needed
+    // if (leftStartZone && centerVal > BLACK_THRESHOLD && binCount < NUM_BINS) {
+    //   state = PICK_SERVICE;
+    // }
  
   } else if (state == PICK_SERVICE) {
  
@@ -181,34 +227,36 @@ void loop() {
       // all bins collected — switch to return to dock
       Serial.println("All bins collected. Returning to dock.");
 
-    //drive off last bin before going to return to doc so we dont sense for light brown early - split out to a 'clear cell' state?
-    //but the fact that it is sensing the last black bin as light brown means light brown is not working properly
-    motors.setSpeeds(BASE_SPEED, BASE_SPEED);
-    delay(1000);  // drive off start square 
+      // robot ends after last bin pickup for navigated to last cell and in theory is facing forward
+      // turn 180 degrees to face the other direction. SPIN_TIME is calc for 360, SPIN_TIME/2 should be ~180. wall following should straighten robot
+      unsigned long spinStart = millis();
+      while (millis() - spinStart < SPIN_TIME/2) {
+        motors.setSpeeds(-80, 80);
+      }
+      motors.setSpeeds(0, 0); 
+      // pause to let sonar stabilize after spin
+      delay(800);
+
+      //drive off last bin before going to return to doc so we dont sense for light brown early - split out to a 'clear cell' state?
+      //but the fact that it is sensing the last black bin as light brown means light brown is not working properly
+      motors.setSpeeds(BASE_SPEED, BASE_SPEED);
+      delay(1000);  // drive off start square  
       state = RETURN_TO_DOCK;
     } else {
       state = WALL_FOLLOWING;
     }
+
+    
  
   } else if (state == RETURN_TO_DOCK) {
 
     //***********************
     returning = true;
 
-    // robot ends after last bin pickup for navigated to last cell and in theory is facing forward
-    // turn 180 degrees to face the other direction. SPIN_TIME is calc for 360, SPIN_TIME/2 should be ~180. wall following should straighten robot
-    unsigned long spinStart = millis();
-    while (millis() - spinStart < SPIN_TIME/2) {
-      motors.setSpeeds(-80, 80);
-    }
-    motors.setSpeeds(0, 0); 
-    // pause to let sonar stabilize after spin
-    delay(800);
-    //******************
- 
-    // continue wall following back to dock
+     //IF THIS WORKS, GOOD ENOUGH!! 
+    // continue wall following back to dock and detect for light brown square
     wallFollowing();
- 
+
     // read IR sensors to detect dock
     lineSensors.readCalibrated(lineSensorValues);
     unsigned int centerVal = lineSensorValues[2];
@@ -332,7 +380,7 @@ void wallFollowing() {
     return;
   }
  
-  double PDout = PDcontroller.update(actualWallDist, GOAL_WALL_DIST);
+  double PDout = wallController.update(actualWallDist, GOAL_WALL_DIST);
  
    int16_t leftSpeed  = constrain(BASE_SPEED + PDout, -400, 400);
    int16_t rightSpeed = constrain(BASE_SPEED - PDout, -400, 400);
